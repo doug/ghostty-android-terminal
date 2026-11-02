@@ -438,6 +438,10 @@
     <!-- Extra-keys editor -->
     <string name="extra_keys_title">Extra keys row</string>
     <string name="extra_keys_switch_chooser_title">Switch layout</string>
+    <string name="extra_keys_text_input_hint">Type, swipe or dictate; Enter sends</string>
+    <string name="extra_keys_text_input_send">Send to terminal</string>
+    <string name="extra_keys_text_input_history">Recent input</string>
+    <string name="extra_keys_text_input_history_empty">Nothing sent from the input box yet.</string>
     <string name="extra_keys_done">Done</string>
     <string name="extra_keys_reset">Reset</string>
     <string name="extra_keys_reset_confirm">Replace this layout\'s keys and row height with the defaults? This can\'t be undone.</string>

@@ -534,6 +534,18 @@ edge-to-edge (targetSdk 36 enforces it); an insets listener pads the root by
 `max(ime, navigationBars)` so the toolbar always rides directly above the
 soft keyboard.
 
+**Text input box.** A horizontal swipe across the toolbar swaps the key rows
+for an ordinary `EditText` (and back). It is the IME path that works
+everywhere: voice typing, glide typing and autocorrect go into a real field
+the app owns, and nothing reaches the PTY until Send, which writes the text
+raw and then Enter through the key encoder. So unlike rich input it does not
+care what the terminal is running (tmux, vim, an ssh session). The box is
+pinned to the key rows' height so the swap never resizes the terminal (no
+SIGWINCH). It wraps rather than scrolling sideways, which keeps a sideways
+drag free to mean "switch back". Long-pressing Send types the text without
+Enter; a history button lists recently sent lines, kept in memory only
+because dictated text can hold secrets.
+
 **Button glyphs are vectors, not font glyphs.** Symbol labels (arrows, Enter,
 Backspace, close, search, settings, drag handle, the `⌥`/`⇧` combo prefixes…)
 would otherwise depend on the device's system font and render differently — or

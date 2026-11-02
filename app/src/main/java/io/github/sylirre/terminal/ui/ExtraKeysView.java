@@ -9,12 +9,18 @@ import android.content.res.ColorStateList;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.Drawable;
+import android.text.InputType;
 import android.util.AttributeSet;
+import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.HapticFeedbackConstants;
+import android.view.KeyEvent;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewConfiguration;
+import android.view.inputmethod.EditorInfo;
+import android.view.inputmethod.InputMethodManager;
+import android.widget.EditText;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 
@@ -44,8 +50,17 @@ import io.github.sylirre.terminal.term.TerminalNative;
  *   <li>tap → the primary key;</li>
  *   <li>swipe up → the cap's secondary key, if it defines one (hinted in the
  *       top-right corner by {@link KeyCapView});</li>
- *   <li>long-press → auto-repeat (KEY/TEXT) or lock (sticky CTRL/ALT).</li>
+ *   <li>long-press → auto-repeat (KEY/TEXT) or lock (sticky CTRL/ALT);</li>
+ *   <li>swipe left or right anywhere on the toolbar → swap the key rows for a
+ *       text input box, and back.</li>
  * </ul>
+ * The text input box is a plain {@link EditText}, so the IME's voice typing,
+ * glide typing and autocorrect work in it whatever the terminal is running
+ * (tmux, vim, …), unlike the rich-keyboard mirror. Send (the IME action or
+ * the trailing button) writes the text to the PTY followed by Enter and
+ * clears the box; an empty Send is a bare Enter. Long-pressing the send button
+ * types the text without Enter. A history button lists recently sent lines
+ * (in memory only) to pull one back into the box for editing.
  * CTRL and ALT are sticky: they highlight and apply to the next key or typed
  * character (via {@link TerminalView.StickyModifiers}). Everything else sends
  * immediately — non-printable keys through the VT key encoder, literal text
@@ -86,6 +101,27 @@ public class ExtraKeysView extends LinearLayout {
     // Vertical padding (px) inside each keycap; the toolbar's row-height knob.
     // Defaults to key_pad_v and is overridden by setKeyVerticalPaddingDp().
     private int keyPaddingV;
+
+    // Text-input mode: the toolbar shows an EditText + send button instead of
+    // the key rows. The field is built once and kept across reload() so a
+    // palette or config change never drops half-typed text.
+    private boolean textMode = false;
+    private EditText input;
+    private ImageView historyButton;
+    private ImageView sendButton;
+
+    // Lines sent from the input box, newest first, for the history button.
+    // Kept in memory only (process-wide, so it outlives Activity recreation):
+    // dictated text can hold things that should never land on disk.
+    private static final List<String> INPUT_HISTORY = new ArrayList<>();
+    private static final int INPUT_HISTORY_MAX = 50;
+    // Content height (px) the key rows last had, so the input row can take the
+    // same height and the swap never resizes the terminal (no SIGWINCH).
+    private int keysContentHeight = 0;
+
+    // Horizontal-swipe tracking for the keys <-> input toggle.
+    private float swipeDownX, swipeDownY;
+    private boolean swipeHandled;
 
     private static final class ModButton {
         final KeyCapView view;
@@ -188,6 +224,14 @@ public class ExtraKeysView extends LinearLayout {
         List<List<ExtraKey>> rows = config.enabledRows(getContext());
         hasKeys = !rows.isEmpty();
 
+        if (textMode && hasKeys) {
+            setOrientation(VERTICAL);
+            addView(buildInputRow(),
+                    new LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT));
+            applyVisibility();
+            return;
+        }
+
         // With the switch column the toolbar becomes [switch | stacked rows];
         // without it the rows stack directly in this vertical container.
         LinearLayout rowsContainer;
@@ -221,6 +265,217 @@ public class ExtraKeysView extends LinearLayout {
         }
         applyVisibility();
         updateToggles();
+    }
+
+    // --- Text input box ---
+
+    /** Swaps between the key rows and the text input box. */
+    private void setTextMode(boolean on) {
+        if (textMode == on) return;
+        if (on && getHeight() > 0) {
+            // Measured while the key rows are still what's laid out.
+            keysContentHeight = getHeight() - getPaddingTop() - getPaddingBottom();
+        }
+        textMode = on;
+        performHapticFeedback(HapticFeedbackConstants.LONG_PRESS);
+        reload();
+        InputMethodManager imm = getContext().getSystemService(InputMethodManager.class);
+        View target = on ? input : terminal;
+        if (target == null) return;
+        target.requestFocus();
+        if (imm != null) imm.showSoftInput(target, 0);
+    }
+
+    /**
+     * The input row: a wrapping text field and a send button, styled like the
+     * keycaps and pinned to at least the key rows' height. The views are built
+     * once and re-parented on every reload so their text survives it.
+     */
+    private View buildInputRow() {
+        Context ctx = getContext();
+        int m = Chrome.dp(ctx, R.dimen.key_gap) / 2;
+        float r = keyRadius();
+        if (input == null) {
+            input = new EditText(ctx);
+            // A plain one-line text type, so the IME shows Send rather than a
+            // newline key — then let it wrap instead of scrolling sideways,
+            // which keeps a horizontal drag free to mean "switch back".
+            input.setInputType(InputType.TYPE_CLASS_TEXT
+                    | InputType.TYPE_TEXT_FLAG_AUTO_CORRECT);
+            input.setHorizontallyScrolling(false);
+            input.setMaxLines(4);
+            input.setImeOptions(EditorInfo.IME_ACTION_SEND
+                    | EditorInfo.IME_FLAG_NO_FULLSCREEN
+                    | EditorInfo.IME_FLAG_NO_EXTRACT_UI);
+            input.setHint(R.string.extra_keys_text_input_hint);
+            input.setGravity(Gravity.CENTER_VERTICAL | Gravity.START);
+            input.setTextSize(TypedValue.COMPLEX_UNIT_PX,
+                    Chrome.dimen(ctx, R.dimen.text_action));
+            input.setPaddingRelative(Chrome.dp(ctx, R.dimen.space_3),
+                    Chrome.dp(ctx, R.dimen.space_1),
+                    Chrome.dp(ctx, R.dimen.space_3),
+                    Chrome.dp(ctx, R.dimen.space_1));
+            input.setOnEditorActionListener((v, actionId, event) -> {
+                // IME Send, or Enter on a hardware keyboard (which arrives as
+                // IME_NULL with a down and an up event: act on the down only).
+                if (event == null || event.getAction() == KeyEvent.ACTION_DOWN) sendInput(true);
+                return true;
+            });
+
+            historyButton = new ImageView(ctx);
+            historyButton.setImageResource(R.drawable.ic_glyph_history);
+            historyButton.setScaleType(ImageView.ScaleType.CENTER);
+            historyButton.setContentDescription(
+                    ctx.getString(R.string.extra_keys_text_input_history));
+            historyButton.setClickable(true);
+            historyButton.setOnClickListener(v -> {
+                v.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP);
+                showInputHistory();
+            });
+
+            sendButton = new ImageView(ctx);
+            sendButton.setImageResource(R.drawable.ic_glyph_enter);
+            sendButton.setScaleType(ImageView.ScaleType.CENTER);
+            sendButton.setContentDescription(ctx.getString(R.string.extra_keys_text_input_send));
+            sendButton.setClickable(true);
+            sendButton.setOnClickListener(v -> {
+                v.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP);
+                sendInput(true);
+            });
+            // Long-press: type the text without Enter, to finish it by hand.
+            sendButton.setOnLongClickListener(v -> {
+                v.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS);
+                sendInput(false);
+                return true;
+            });
+        }
+        for (View v : new View[] {input, historyButton, sendButton}) {
+            if (v.getParent() != null) ((LinearLayout) v.getParent()).removeView(v);
+        }
+        input.setTextColor(palette.textPrimary);
+        input.setHintTextColor(palette.textSecondary);
+        input.setBackground(palette.rounded(palette.surface2, r, palette.border));
+        historyButton.setImageTintList(ColorStateList.valueOf(palette.textSecondary));
+        historyButton.setBackground(keyBg());
+        sendButton.setImageTintList(ColorStateList.valueOf(palette.accent));
+        sendButton.setBackground(keyBg());
+
+        LinearLayout row = new LinearLayout(ctx);
+        row.setOrientation(HORIZONTAL);
+        row.setMinimumHeight(keysContentHeight);
+        LinearLayout.LayoutParams fieldLp = new LinearLayout.LayoutParams(
+                0, LinearLayout.LayoutParams.MATCH_PARENT, 1f);
+        fieldLp.setMargins(m, m, m, m);
+        row.addView(input, fieldLp);
+        for (View b : new View[] {historyButton, sendButton}) {
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                    Chrome.dp(ctx, R.dimen.icon_button), LinearLayout.LayoutParams.MATCH_PARENT);
+            lp.setMargins(m, m, m, m);
+            row.addView(b, lp);
+        }
+        return row;
+    }
+
+    /**
+     * Writes the box's text to the terminal, followed by Enter when
+     * {@code withEnter}, then clears the box (focus stays, so the next line
+     * can be dictated straight away). The text goes raw, exactly as if typed;
+     * Enter goes through the key encoder. An empty box with Enter is a bare
+     * Enter; an empty box without it does nothing.
+     */
+    private void sendInput(boolean withEnter) {
+        if (input == null || terminal == null) return;
+        String text = input.getText().toString();
+        if (!text.isEmpty()) {
+            terminal.dispatchText(text);
+            rememberInput(text);
+        }
+        if (withEnter) terminal.dispatchKey(KeyEvent.KEYCODE_ENTER);
+        input.setText("");
+    }
+
+    private static void rememberInput(String text) {
+        INPUT_HISTORY.remove(text); // re-sending moves it to the top
+        INPUT_HISTORY.add(0, text);
+        while (INPUT_HISTORY.size() > INPUT_HISTORY_MAX) {
+            INPUT_HISTORY.remove(INPUT_HISTORY.size() - 1);
+        }
+    }
+
+    /** Lists recent lines, newest first; picking one puts it back in the box to edit. */
+    private void showInputHistory() {
+        AlertDialog.Builder b = new AlertDialog.Builder(getContext())
+                .setTitle(R.string.extra_keys_text_input_history)
+                .setNegativeButton(R.string.action_cancel, null);
+        if (INPUT_HISTORY.isEmpty()) {
+            b.setMessage(R.string.extra_keys_text_input_history_empty);
+        } else {
+            CharSequence[] items = INPUT_HISTORY.toArray(new CharSequence[0]);
+            b.setItems(items, (d, which) -> {
+                String picked = items[which].toString();
+                input.setText(picked);
+                input.setSelection(picked.length());
+                input.requestFocus();
+                InputMethodManager imm =
+                        getContext().getSystemService(InputMethodManager.class);
+                if (imm != null) imm.showSoftInput(input, 0);
+            });
+        }
+        b.show();
+    }
+
+    // A sideways drag anywhere on the toolbar toggles the input box. It is
+    // watched in dispatchTouchEvent rather than onInterceptTouchEvent because
+    // the EditText calls requestDisallowInterceptTouchEvent on a drag, which
+    // would hide the gesture from an intercept. Once it qualifies, the child
+    // under the finger gets CANCEL (a keycap drops its repeat/long-press
+    // without emitting) and the rest of the gesture is swallowed. Mostly
+    // vertical drags are left alone: swipe-up is the caps' secondary gesture.
+
+    @Override
+    public boolean dispatchTouchEvent(MotionEvent ev) {
+        boolean wasSwipe = swipeHandled && ev.getActionMasked() != MotionEvent.ACTION_DOWN;
+        if (wasSwipe) {
+            if (ev.getActionMasked() == MotionEvent.ACTION_UP
+                    || ev.getActionMasked() == MotionEvent.ACTION_CANCEL) {
+                swipeHandled = false;
+            }
+            return true;
+        }
+        if (trackSwipe(ev)) {
+            MotionEvent cancel = MotionEvent.obtain(ev);
+            cancel.setAction(MotionEvent.ACTION_CANCEL);
+            super.dispatchTouchEvent(cancel);
+            cancel.recycle();
+            return true;
+        }
+        super.dispatchTouchEvent(ev);
+        return true; // keep receiving a gesture that began on a gutter
+    }
+
+    /** True once the gesture in progress has become a toggle swipe. */
+    private boolean trackSwipe(MotionEvent ev) {
+        switch (ev.getActionMasked()) {
+            case MotionEvent.ACTION_DOWN:
+                swipeDownX = ev.getX();
+                swipeDownY = ev.getY();
+                swipeHandled = false;
+                return false;
+            case MotionEvent.ACTION_MOVE:
+                if (swipeHandled) return true;
+                float dx = Math.abs(ev.getX() - swipeDownX);
+                float dy = Math.abs(ev.getY() - swipeDownY);
+                if (dx > swipeThresholdPx * 2 && dx > dy * 2) {
+                    swipeHandled = true;
+                    // Posted: the toggle rebuilds the children, which must not
+                    // happen while this very event is being dispatched to them.
+                    post(() -> setTextMode(!textMode));
+                    return true;
+                }
+                return false;
+            default:
+                return swipeHandled;
+        }
     }
 
     /** The leading profile-switch cap: tap cycles the active profile, long-press chooses. */
