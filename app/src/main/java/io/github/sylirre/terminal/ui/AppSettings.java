@@ -53,6 +53,7 @@ public final class AppSettings {
     private static final String KEY_TERMINAL_BELL_LEGACY = "terminal_bell";
     private static final String KEY_TERMINAL_BELL_MODE = "terminal_bell_mode";
     private static final String KEY_USERLAND_LOGIN_SHELL = "userland_shell";
+    private static final String KEY_USERLAND_START_COMMAND = "userland_start_command";
     private static final String KEY_USERLAND_IDENTITY = "userland_identity";
     private static final String KEY_USERLAND_HOME = "userland_home";
     private static final String KEY_USERLAND_WORK_DIR = "userland_work_dir";
@@ -611,6 +612,20 @@ public final class AppSettings {
 
     public void setUserlandLoginShell(String shell) {
         prefs.edit().putString(KEY_USERLAND_LOGIN_SHELL, shell.trim()).apply();
+    }
+
+    /**
+     * A command typed into every new userland tab once its shell starts (e.g.
+     * {@code ssh dev}), as if the user had entered it — so leaving it lands back
+     * at the shell prompt instead of closing the tab. Empty (the default) types
+     * nothing. Android-shell and guest-machine tabs never get it.
+     */
+    public String userlandStartCommand() {
+        return prefs.getString(KEY_USERLAND_START_COMMAND, "");
+    }
+
+    public void setUserlandStartCommand(String command) {
+        prefs.edit().putString(KEY_USERLAND_START_COMMAND, command.trim()).apply();
     }
 
     /**

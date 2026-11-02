@@ -494,6 +494,12 @@ public class MainActivity extends Activity implements TerminalSession.Listener {
                     settings.terminateProcessesOnExit(), this);
             switchTo(s);
             applyTheme(); // color the new session before any output arrives
+            // The start command (e.g. "ssh dev") is typed, not exec'd, so
+            // leaving it returns to this shell rather than closing the tab.
+            // Written now, it waits in the PTY as typeahead until the shell
+            // reads its first line.
+            String start = settings.userlandStartCommand();
+            if (userland && !start.isEmpty()) s.write(start + "\r");
             if (settings.touchKeyboard()) showKeyboard();
             // Promote the process to foreground priority so the shell
             // survives backgrounding; refresh updates the session count.

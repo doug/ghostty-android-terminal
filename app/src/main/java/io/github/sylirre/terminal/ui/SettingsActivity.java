@@ -273,6 +273,16 @@ public final class SettingsActivity extends Activity {
                 settings::userlandLoginShell,
                 this::showLoginShellDialog));
         userland.add(new Setting.Action(
+                getString(R.string.setting_userland_start_command_title),
+                getString(R.string.setting_userland_start_command_summary),
+                () -> {
+                    String c = settings.userlandStartCommand();
+                    return c.isEmpty()
+                            ? getString(R.string.setting_userland_start_command_none)
+                            : c;
+                },
+                this::showStartCommandDialog));
+        userland.add(new Setting.Action(
                 getString(R.string.setting_userland_workdir_title),
                 getString(R.string.setting_userland_workdir_summary),
                 () -> {
@@ -616,6 +626,15 @@ public final class SettingsActivity extends Activity {
                 this::validateShellCommand,
                 settings::setUserlandLoginShell,
                 () -> settings.setUserlandLoginShell(""));
+    }
+
+    private void showStartCommandDialog() {
+        Dialogs.prompt(this, R.string.setting_userland_start_command_title,
+                settings.userlandStartCommand(),
+                getString(R.string.setting_userland_start_command_hint), true,
+                null,
+                settings::setUserlandStartCommand,
+                () -> settings.setUserlandStartCommand(""));
     }
 
     private void showIdentityDialog() {
