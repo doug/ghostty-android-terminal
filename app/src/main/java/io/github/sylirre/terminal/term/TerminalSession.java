@@ -245,6 +245,12 @@ public final class TerminalSession {
                 byte[] response = emulator.feed(buf, n);
                 if (response != null) writeRaw(response); // protocol reply, not user input
                 dispatchEvents();
+                if (pendingStartInput != null) {
+                    // Debounce: re-arm on every burst, so it fires once the
+                    // shell has gone quiet (normally right after its prompt).
+                    mainHandler.removeCallbacks(flushStartInput);
+                    mainHandler.postDelayed(flushStartInput, START_INPUT_QUIET_MS);
+                }
             }
         } catch (IOException ignored) {
             // PTY closed (shell exited or session closed); fall through.
@@ -364,6 +370,30 @@ public final class TerminalSession {
     public void write(String text) {
         userInteracted = true;
         writeRaw(text.getBytes(StandardCharsets.UTF_8));
+    }
+
+    // Start-command typeahead (typeWhenReady): held until the shell's startup
+    // output has gone quiet, then written once.
+    private static final long START_INPUT_QUIET_MS = 500;
+    private static final long START_INPUT_FALLBACK_MS = 8_000;
+    private volatile String pendingStartInput;
+    private final Runnable flushStartInput = () -> {
+        String text = pendingStartInput;
+        pendingStartInput = null;
+        if (text != null) write(text);
+    };
+
+    /**
+     * Types {@code text} once the shell is ready for it: after its startup
+     * output (profile, then the prompt) has been quiet for
+     * {@link #START_INPUT_QUIET_MS}, or after {@link #START_INPUT_FALLBACK_MS}
+     * if it never prints. Written straight away it would be lost: a shell (or
+     * the emulator under it) flushes the tty while it starts, discarding
+     * typeahead and its echo alike.
+     */
+    public void typeWhenReady(String text) {
+        pendingStartInput = text;
+        mainHandler.postDelayed(flushStartInput, START_INPUT_FALLBACK_MS);
     }
 
     public void writeBytes(byte[] data) {
