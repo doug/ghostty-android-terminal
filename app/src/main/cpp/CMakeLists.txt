@@ -137,7 +137,10 @@ endif()
 # arm64chroot's are: that Makefile builds with $(wildcard), so there is no SRCS
 # list to read and a glob is what it compiles.
 
-set(A64EMU_DIR ${NATIVE_DIR}/arm64emu)
+# The pinned upstream commit keeps the emulator under arm64emu-sys/ (the
+# repository later merged three projects into one tree); the commit this
+# submodule used to pin, with the sources at its root, no longer exists.
+set(A64EMU_DIR ${NATIVE_DIR}/arm64emu/arm64emu-sys)
 file(GLOB_RECURSE _emu_srcs CONFIGURE_DEPENDS ${A64EMU_DIR}/src/*.c)
 if(NOT _emu_srcs)
     message(FATAL_ERROR "arm64emu: no sources under ${A64EMU_DIR}/src")
