@@ -106,6 +106,7 @@ public class MainActivity extends Activity implements TerminalSession.Listener {
     private ChromePalette chrome;
     private long lastClipToastUptime;
     private ExtraKeysView extraKeys;
+    private VoiceInput voiceInput;
     private TerminalSession current;
     private AppSettings settings;
     private ThemeStore themeStore;
@@ -138,6 +139,8 @@ public class MainActivity extends Activity implements TerminalSession.Listener {
         forceShell = getIntent().getBooleanExtra(EXTRA_FORCE_SHELL, false);
         extraKeys = findViewById(R.id.extra_keys);
         extraKeys.attachTerminal(terminal);
+        voiceInput = new VoiceInput(this);
+        extraKeys.setVoiceInput(voiceInput);
         mainTopBar = findViewById(R.id.main_top_bar);
         mainTopBar.setOutlineProvider(ViewOutlineProvider.BOUNDS);
         chrome = ChromePalette.from(this, 0xFF000000);
@@ -334,8 +337,26 @@ public class MainActivity extends Activity implements TerminalSession.Listener {
     }
 
     @Override
+    protected void onPause() {
+        super.onPause();
+        // Never keep the microphone open behind another app or a locked screen.
+        if (voiceInput != null) voiceInput.cancel();
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int requestCode, String[] permissions,
+            int[] grantResults) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        if (requestCode == VoiceInput.REQ_RECORD_AUDIO && voiceInput != null) {
+            voiceInput.onPermissionResult(grantResults.length > 0
+                    && grantResults[0] == PackageManager.PERMISSION_GRANTED);
+        }
+    }
+
+    @Override
     protected void onDestroy() {
         super.onDestroy();
+        if (voiceInput != null) voiceInput.destroy();
         SessionService.clearExitListener(onServiceExit);
         if (bellTone != null) {
             bellTone.release(); // frees the native audio track it holds

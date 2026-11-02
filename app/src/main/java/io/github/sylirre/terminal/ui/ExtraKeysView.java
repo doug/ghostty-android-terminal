@@ -23,6 +23,7 @@ import android.view.inputmethod.InputMethodManager;
 import android.widget.EditText;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
+import android.widget.Toast;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -107,8 +108,16 @@ public class ExtraKeysView extends LinearLayout {
     // palette or config change never drops half-typed text.
     private boolean textMode = false;
     private EditText input;
+    private ImageView micButton;
     private ImageView historyButton;
     private ImageView sendButton;
+
+    // Voice input into the box (see VoiceInput / SpokenKeys). voiceBase is the
+    // box's text when listening began: partial transcripts are shown after it,
+    // and it is what's restored when the utterance turns out to be a command.
+    private VoiceInput voice;
+    private String voiceBase = "";
+    private boolean voiceDirectSend;
 
     // Lines sent from the input box, newest first, for the history button.
     // Kept in memory only (process-wide, so it outlives Activity recreation):
@@ -276,6 +285,7 @@ public class ExtraKeysView extends LinearLayout {
             // Measured while the key rows are still what's laid out.
             keysContentHeight = getHeight() - getPaddingTop() - getPaddingBottom();
         }
+        if (!on && voice != null) voice.cancel();
         textMode = on;
         performHapticFeedback(HapticFeedbackConstants.LONG_PRESS);
         reload();
@@ -283,7 +293,121 @@ public class ExtraKeysView extends LinearLayout {
         View target = on ? input : terminal;
         if (target == null) return;
         target.requestFocus();
-        if (imm != null) imm.showSoftInput(target, 0);
+        // Only raise the keyboard if it was already up: with it down (voice
+        // input, or simply put away) the swap shouldn't bring it back. Tapping
+        // the field or the terminal raises it as usual.
+        if (imm != null && keyboardVisible) imm.showSoftInput(target, 0);
+    }
+
+    /** Hooks up voice input; until this is called the mic button does nothing. */
+    public void setVoiceInput(VoiceInput v) {
+        voice = v;
+        v.setListener(voiceListener);
+    }
+
+    /**
+     * Mic button: start listening (hiding the keyboard, which voice input is
+     * meant to do without), or stop early if already listening. With
+     * {@code directSend} the transcript is sent with Enter as soon as it's
+     * final instead of waiting in the box.
+     */
+    private void toggleVoice(boolean directSend) {
+        if (voice == null || input == null) return;
+        if (voice.isListening()) {
+            voice.stop();
+            return;
+        }
+        voiceDirectSend = directSend;
+        voiceBase = input.getText().toString();
+        InputMethodManager imm = getContext().getSystemService(InputMethodManager.class);
+        if (imm != null) imm.hideSoftInputFromWindow(getWindowToken(), 0);
+        voice.start();
+    }
+
+    private static String appendSpoken(String base, String spoken) {
+        if (base.isEmpty()) return spoken;
+        return base.endsWith(" ") ? base + spoken : base + " " + spoken;
+    }
+
+    private void setInputText(String text) {
+        input.setText(text);
+        input.setSelection(text.length());
+    }
+
+    private final VoiceInput.Listener voiceListener = new VoiceInput.Listener() {
+        @Override
+        public void onListeningChanged(boolean listening) {
+            if (micButton == null) return;
+            micButton.setBackground(listening ? keyBgActive() : keyBg());
+            micButton.setImageTintList(ColorStateList.valueOf(
+                    listening ? palette.onAccent : palette.textSecondary));
+            input.setHint(listening ? R.string.voice_listening_hint
+                    : R.string.extra_keys_text_input_hint);
+        }
+
+        @Override
+        public void onPartial(String text) {
+            if (input != null) setInputText(appendSpoken(voiceBase, text));
+        }
+
+        @Override
+        public void onFinal(String text) {
+            if (input == null) return;
+            List<String> command = SpokenKeys.match(text);
+            if (command != null) {
+                setInputText(voiceBase);
+                runSpoken(command);
+                return;
+            }
+            String trimmed = text.trim();
+            if (trimmed.isEmpty()) {
+                setInputText(voiceBase);
+                return;
+            }
+            setInputText(appendSpoken(voiceBase, trimmed));
+            if (voiceDirectSend) sendInput(true);
+        }
+
+        @Override
+        public void onError(String message) {
+            if (input != null) setInputText(voiceBase);
+            Toast.makeText(getContext(), message, Toast.LENGTH_SHORT).show();
+        }
+    };
+
+    /** Performs a spoken command's tokens (see {@link SpokenKeys}). */
+    private void runSpoken(List<String> tokens) {
+        if (terminal == null) return;
+        performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP);
+        for (String t : tokens) {
+            if (t.equals("send")) {
+                sendInput(true);
+            } else if (t.equals("clear")) {
+                setInputText("");
+            } else if (t.startsWith("key:")) {
+                int code = spokenKeyCode(t.substring(4));
+                if (code != KeyEvent.KEYCODE_UNKNOWN) terminal.dispatchKey(code);
+            } else if (t.startsWith("ctrl:")) {
+                terminal.dispatchText(t.substring(5), TerminalNative.MOD_CTRL);
+            } else if (t.startsWith("text:")) {
+                terminal.dispatchText(t.substring(5));
+            }
+        }
+    }
+
+    private static int spokenKeyCode(String name) {
+        switch (name) {
+            case "escape": return KeyEvent.KEYCODE_ESCAPE;
+            case "tab": return KeyEvent.KEYCODE_TAB;
+            case "backspace": return KeyEvent.KEYCODE_DEL;
+            case "up": return KeyEvent.KEYCODE_DPAD_UP;
+            case "down": return KeyEvent.KEYCODE_DPAD_DOWN;
+            case "left": return KeyEvent.KEYCODE_DPAD_LEFT;
+            case "right": return KeyEvent.KEYCODE_DPAD_RIGHT;
+            case "pageup": return KeyEvent.KEYCODE_PAGE_UP;
+            case "pagedown": return KeyEvent.KEYCODE_PAGE_DOWN;
+            default: return KeyEvent.KEYCODE_UNKNOWN;
+        }
     }
 
     /**
@@ -322,6 +446,22 @@ public class ExtraKeysView extends LinearLayout {
                 return true;
             });
 
+            micButton = new ImageView(ctx);
+            micButton.setImageResource(R.drawable.ic_glyph_mic);
+            micButton.setScaleType(ImageView.ScaleType.CENTER);
+            micButton.setContentDescription(ctx.getString(R.string.extra_keys_voice));
+            micButton.setClickable(true);
+            micButton.setOnClickListener(v -> {
+                v.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP);
+                toggleVoice(false);
+            });
+            // Long-press: dictate and send straight away, with Enter.
+            micButton.setOnLongClickListener(v -> {
+                v.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS);
+                toggleVoice(true);
+                return true;
+            });
+
             historyButton = new ImageView(ctx);
             historyButton.setImageResource(R.drawable.ic_glyph_history);
             historyButton.setScaleType(ImageView.ScaleType.CENTER);
@@ -349,9 +489,13 @@ public class ExtraKeysView extends LinearLayout {
                 return true;
             });
         }
-        for (View v : new View[] {input, historyButton, sendButton}) {
+        for (View v : new View[] {input, micButton, historyButton, sendButton}) {
             if (v.getParent() != null) ((LinearLayout) v.getParent()).removeView(v);
         }
+        boolean listening = voice != null && voice.isListening();
+        micButton.setImageTintList(ColorStateList.valueOf(
+                listening ? palette.onAccent : palette.textSecondary));
+        micButton.setBackground(listening ? keyBgActive() : keyBg());
         input.setTextColor(palette.textPrimary);
         input.setHintTextColor(palette.textSecondary);
         input.setBackground(palette.rounded(palette.surface2, r, palette.border));
@@ -367,7 +511,7 @@ public class ExtraKeysView extends LinearLayout {
                 0, LinearLayout.LayoutParams.MATCH_PARENT, 1f);
         fieldLp.setMargins(m, m, m, m);
         row.addView(input, fieldLp);
-        for (View b : new View[] {historyButton, sendButton}) {
+        for (View b : new View[] {micButton, historyButton, sendButton}) {
             LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
                     Chrome.dp(ctx, R.dimen.icon_button), LinearLayout.LayoutParams.MATCH_PARENT);
             lp.setMargins(m, m, m, m);
@@ -520,7 +664,10 @@ public class ExtraKeysView extends LinearLayout {
     }
 
     private void applyVisibility() {
-        boolean show = enabledRow && hasKeys && (!hideWhenKeyboardHidden || keyboardVisible);
+        // The input box counts as an input surface of its own: it stays up with
+        // the keyboard down, which is how voice input is used.
+        boolean show = enabledRow && hasKeys
+                && (!hideWhenKeyboardHidden || keyboardVisible || textMode);
         setVisibility(show ? VISIBLE : GONE);
     }
 

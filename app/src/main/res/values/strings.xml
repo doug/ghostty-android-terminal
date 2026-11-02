@@ -446,6 +446,15 @@
     <string name="extra_keys_text_input_send">Send to terminal</string>
     <string name="extra_keys_text_input_history">Recent input</string>
     <string name="extra_keys_text_input_history_empty">Nothing sent from the input box yet.</string>
+    <string name="extra_keys_voice">Voice input (long-press to send directly)</string>
+    <string name="voice_listening_hint">Listening…</string>
+    <string name="voice_error_needs_android_12">Voice input needs Android 12 or later.</string>
+    <string name="voice_error_no_on_device">On-device speech recognition isn\'t available on this phone.</string>
+    <string name="voice_error_permission">Voice input needs the microphone permission.</string>
+    <string name="voice_error_no_match">Didn\'t catch that.</string>
+    <string name="voice_error_downloading_model">Downloading the speech model. Try again in a minute.</string>
+    <string name="voice_error_busy">Speech recognizer was busy. Try again.</string>
+    <string name="voice_error_generic">Speech recognition failed (error %1$d).</string>
     <string name="extra_keys_done">Done</string>
     <string name="extra_keys_reset">Reset</string>
     <string name="extra_keys_reset_confirm">Replace this layout\'s keys and row height with the defaults? This can\'t be undone.</string>

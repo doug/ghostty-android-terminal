@@ -546,6 +546,17 @@ drag free to mean "switch back". Long-pressing Send types the text without
 Enter; a history button lists recently sent lines, kept in memory only
 because dictated text can hold secrets.
 
+**Voice input.** The box's mic button dictates with the soft keyboard hidden,
+through `VoiceInput`: the platform `SpeechRecognizer`, created with
+`createOnDeviceSpeechRecognizer` so audio never leaves the phone — there is no
+fallback to the network recognizer (API < 31 or no on-device service reports
+an error). RECORD_AUDIO is requested on first use. Partial transcripts fill the
+box live; long-press dictates and sends with Enter. A final transcript that is
+*wholly* a known phrase is a command instead (`SpokenKeys`: "escape",
+"control c", "option 2", tmux's "next window"/"window 3"/"detach", "enter"
+to send the box…), so "press escape to quit" is still typed. `SpokenKeys`
+has no Android dependencies, so its grammar can be exercised on a plain JVM.
+
 **Button glyphs are vectors, not font glyphs.** Symbol labels (arrows, Enter,
 Backspace, close, search, settings, drag handle, the `⌥`/`⇧` combo prefixes…)
 would otherwise depend on the device's system font and render differently — or
