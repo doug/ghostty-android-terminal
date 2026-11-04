@@ -39,6 +39,18 @@ final class ThemePresets {
             0xFF002B36, 0xFFCB4B16, 0xFF586E75, 0xFF657B83,
             0xFF839496, 0xFF6C71C4, 0xFF93A1A1, 0xFFFDF6E3),
 
+        // E-ink: black on white for grayscale (and Kaleido color) e-paper.
+        // Colors are dark enough to read as text on white (each about 5:1 or
+        // better) yet light enough that black text on them, such as tmux's
+        // default status bar on green, stays legible. White (7, 15) is a
+        // mid gray, because programs that assume a dark background print in
+        // it and pure white would vanish.
+        t("E-ink", 0xFF000000, 0xFFFFFFFF, 0xFF000000,
+            0xFF000000, 0xFFB00000, 0xFF007000, 0xFF7A5C00,
+            0xFF0040C0, 0xFF9C009C, 0xFF006A6A, 0xFF9A9A9A,
+            0xFF505050, 0xFFC80000, 0xFF008400, 0xFF8C6C00,
+            0xFF1A5CE0, 0xFFB800B8, 0xFF007E7E, 0xFF6E6E6E),
+
         t("Dracula", 0xFFF8F8F2, 0xFF282A36, 0xFFF8F8F2,
             0xFF21222C, 0xFFFF5555, 0xFF50FA7B, 0xFFF1FA8C,
             0xFFBD93F9, 0xFFFF79C6, 0xFF8BE9FD, 0xFFF8F8F2,
