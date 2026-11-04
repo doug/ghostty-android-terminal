@@ -28,12 +28,15 @@ import android.provider.OpenableColumns;
 import android.provider.Settings;
 import android.util.Base64;
 import android.util.DisplayMetrics;
+import android.view.Gravity;
 import android.view.View;
+import android.view.ViewGroup;
 import android.view.ViewOutlineProvider;
 import android.view.WindowInsets;
 import android.view.WindowInsetsController;
 import android.view.WindowManager;
 import android.view.inputmethod.InputMethodManager;
+import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 import android.widget.ProgressBar;
 import android.widget.TextView;
@@ -102,6 +105,7 @@ public class MainActivity extends Activity implements TerminalSession.Listener {
     private TextView promptPrevButton;
     private TextView promptNextButton;
     private View mainTopBar;
+    private boolean floatingTopBar;
     /** Active chrome palette, derived from the terminal theme (see applyChrome). */
     private ChromePalette chrome;
     private long lastClipToastUptime;
@@ -323,6 +327,7 @@ public class MainActivity extends Activity implements TerminalSession.Listener {
         applyTextMargins();
         applyKeepScreenOn(settings.keepScreenOn());
         applyImmersiveMode(settings.immersiveMode());
+        applyFloatingTopBar(settings.floatingTopBar());
         terminal.setTouchKeyboardEnabled(settings.touchKeyboard());
         terminal.setRichKeyboard(settings.richKeyboard());
         terminal.setSmoothScroll(settings.smoothScroll());
@@ -397,7 +402,9 @@ public class MainActivity extends Activity implements TerminalSession.Listener {
     private void applyChrome(ChromePalette p) {
         chrome = p;
         findViewById(R.id.root).setBackgroundColor(p.surface1);
-        mainTopBar.setBackground(p.barSurface(true));
+        mainTopBar.setBackground(floatingTopBar
+                ? p.rounded(p.surface1, Chrome.dimen(this, R.dimen.radius_md), p.border)
+                : p.barSurface(true));
         styleTopBarButton(promptPrevButton);
         styleTopBarButton(promptNextButton);
         styleTopBarButton(findViewById(R.id.settings_button));
@@ -1219,6 +1226,42 @@ public class MainActivity extends Activity implements TerminalSession.Listener {
         } else {
             getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         }
+    }
+
+    /**
+     * Moves the top bar between its two homes: docked as a full-width row
+     * above the terminal, or floating as a rounded cluster over the terminal's
+     * top-right corner (an overlay in the root FrameLayout, so the terminal
+     * keeps the full height). Floating, a lone tab's pill is hidden. The bar
+     * wraps its content there; the tab strip keeps its weight, so with many
+     * tabs LinearLayout shrinks it to fit and its pills scroll. Idempotent.
+     */
+    private void applyFloatingTopBar(boolean floating) {
+        if (floating == floatingTopBar && mainTopBar.getParent() != null) return;
+        floatingTopBar = floating;
+        ViewGroup root = findViewById(R.id.root);
+        ViewGroup column = (ViewGroup) root.getChildAt(0);
+        ((ViewGroup) mainTopBar.getParent()).removeView(mainTopBar);
+        int pad = Chrome.dp(this, R.dimen.space_1);
+        if (floating) {
+            FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(
+                    ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT,
+                    Gravity.TOP | Gravity.END);
+            lp.setMargins(pad, pad, pad, pad);
+            // Above the terminal column, below the search bar overlay.
+            root.addView(mainTopBar, 1, lp);
+            mainTopBar.setMinimumHeight(0);
+            mainTopBar.setPadding(pad, pad, pad, pad);
+            mainTopBar.setOutlineProvider(ViewOutlineProvider.BACKGROUND);
+        } else {
+            column.addView(mainTopBar, 0, new LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+            mainTopBar.setMinimumHeight(Chrome.dp(this, R.dimen.main_bar_height));
+            mainTopBar.setPadding(pad, 0, pad, 0);
+            mainTopBar.setOutlineProvider(ViewOutlineProvider.BOUNDS);
+        }
+        tabs.setHideLoneTab(floating);
+        applyChrome(chrome);
     }
 
     /** Hides or restores the status/navigation bars for a fullscreen terminal surface. */

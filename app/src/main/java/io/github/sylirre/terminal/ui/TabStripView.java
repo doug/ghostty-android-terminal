@@ -99,6 +99,8 @@ public class TabStripView extends LinearLayout {
         }
     }
 
+    private boolean hideLoneTab;
+
     public TabStripView(Context context, AttributeSet attrs) {
         super(context, attrs);
         setOrientation(HORIZONTAL);
@@ -144,6 +146,19 @@ public class TabStripView extends LinearLayout {
         listener = l;
     }
 
+    /**
+     * When true, the strip hides its tab pills while there is only one tab,
+     * leaving just the new-tab button (the floating bar's collapsed form).
+     */
+    public void setHideLoneTab(boolean hide) {
+        hideLoneTab = hide;
+        updateLoneTab();
+    }
+
+    private void updateLoneTab() {
+        scroller.setVisibility(hideLoneTab && holders.size() <= 1 ? GONE : VISIBLE);
+    }
+
     /** Re-derives all pill/button styling from a new chrome palette. */
     public void applyPalette(ChromePalette p) {
         palette = p;
@@ -164,6 +179,7 @@ public class TabStripView extends LinearLayout {
         while (holders.size() < titles.size()) {
             holders.add(makeTab());
         }
+        updateLoneTab();
         View activeTab = null;
         for (int i = 0; i < holders.size(); i++) {
             Holder h = holders.get(i);

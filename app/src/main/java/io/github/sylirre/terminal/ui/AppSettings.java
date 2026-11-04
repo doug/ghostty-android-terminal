@@ -24,6 +24,7 @@ public final class AppSettings {
     private static final String FILE = "settings";
     private static final String KEY_KEEP_SCREEN_ON = "keep_screen_on";
     private static final String KEY_IMMERSIVE_MODE = "immersive_mode";
+    private static final String KEY_FLOATING_TOP_BAR = "floating_top_bar";
     private static final String KEY_RICH_KEYBOARD = "rich_keyboard";
     private static final String KEY_EXTRA_KEYS_ENABLED = "extra_keys_enabled";
     private static final String KEY_SCROLLBACK_LINES = "scrollback_lines";
@@ -125,6 +126,18 @@ public final class AppSettings {
 
     public void setImmersiveMode(boolean enabled) {
         prefs.edit().putBoolean(KEY_IMMERSIVE_MODE, enabled).apply();
+    }
+
+    /**
+     * When true, the tab bar floats over the terminal's top-right corner as a
+     * compact cluster instead of taking a full-width row above it.
+     */
+    public boolean floatingTopBar() {
+        return prefs.getBoolean(KEY_FLOATING_TOP_BAR, false);
+    }
+
+    public void setFloatingTopBar(boolean enabled) {
+        prefs.edit().putBoolean(KEY_FLOATING_TOP_BAR, enabled).apply();
     }
 
     /**
