@@ -444,8 +444,7 @@
     <string name="extra_keys_switch_chooser_title">Switch layout</string>
     <string name="extra_keys_text_input_hint">Type, swipe or dictate; Enter sends</string>
     <string name="extra_keys_text_input_send">Send to terminal</string>
-    <string name="extra_keys_text_input_history">Recent input</string>
-    <string name="extra_keys_text_input_history_empty">Nothing sent from the input box yet.</string>
+    <string name="extra_keys_text_input_delete">Delete last word (long-press clears)</string>
     <string name="extra_keys_voice">Voice input (long-press to send directly)</string>
     <string name="voice_listening_hint">Listening…</string>
     <string name="voice_error_needs_android_12">Voice input needs Android 12 or later.</string>

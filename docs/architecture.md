@@ -543,8 +543,9 @@ care what the terminal is running (tmux, vim, an ssh session). The box is
 pinned to the key rows' height so the swap never resizes the terminal (no
 SIGWINCH). It wraps rather than scrolling sideways, which keeps a sideways
 drag free to mean "switch back". Long-pressing Send types the text without
-Enter; a history button lists recently sent lines, kept in memory only
-because dictated text can hold secrets.
+Enter. A delete button removes the box's last word (or the selection), so a
+misheard ending can be re-dictated; long-press clears the box, and with the
+box empty it sends Backspace to the terminal.
 
 **Voice input.** The box's mic button dictates with the soft keyboard hidden,
 through `VoiceInput`: the platform `SpeechRecognizer`, created with

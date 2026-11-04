@@ -9,6 +9,7 @@ import android.content.res.ColorStateList;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.Drawable;
+import android.text.Editable;
 import android.text.InputType;
 import android.util.AttributeSet;
 import android.util.TypedValue;
@@ -60,8 +61,8 @@ import io.github.sylirre.terminal.term.TerminalNative;
  * (tmux, vim, …), unlike the rich-keyboard mirror. Send (the IME action or
  * the trailing button) writes the text to the PTY followed by Enter and
  * clears the box; an empty Send is a bare Enter. Long-pressing the send button
- * types the text without Enter. A history button lists recently sent lines
- * (in memory only) to pull one back into the box for editing.
+ * types the text without Enter. A delete button removes the box's last word
+ * (long-press clears it), or sends Backspace to the terminal when it is empty.
  * CTRL and ALT are sticky: they highlight and apply to the next key or typed
  * character (via {@link TerminalView.StickyModifiers}). Everything else sends
  * immediately — non-printable keys through the VT key encoder, literal text
@@ -109,7 +110,7 @@ public class ExtraKeysView extends LinearLayout {
     private boolean textMode = false;
     private EditText input;
     private ImageView micButton;
-    private ImageView historyButton;
+    private ImageView deleteButton;
     private ImageView sendButton;
 
     // Voice input into the box (see VoiceInput / SpokenKeys). voiceBase is the
@@ -119,11 +120,6 @@ public class ExtraKeysView extends LinearLayout {
     private String voiceBase = "";
     private boolean voiceDirectSend;
 
-    // Lines sent from the input box, newest first, for the history button.
-    // Kept in memory only (process-wide, so it outlives Activity recreation):
-    // dictated text can hold things that should never land on disk.
-    private static final List<String> INPUT_HISTORY = new ArrayList<>();
-    private static final int INPUT_HISTORY_MAX = 50;
     // Content height (px) the key rows last had, so the input row can take the
     // same height and the swap never resizes the terminal (no SIGWINCH).
     private int keysContentHeight = 0;
@@ -462,15 +458,21 @@ public class ExtraKeysView extends LinearLayout {
                 return true;
             });
 
-            historyButton = new ImageView(ctx);
-            historyButton.setImageResource(R.drawable.ic_glyph_history);
-            historyButton.setScaleType(ImageView.ScaleType.CENTER);
-            historyButton.setContentDescription(
-                    ctx.getString(R.string.extra_keys_text_input_history));
-            historyButton.setClickable(true);
-            historyButton.setOnClickListener(v -> {
+            deleteButton = new ImageView(ctx);
+            deleteButton.setImageResource(R.drawable.ic_glyph_backspace);
+            deleteButton.setScaleType(ImageView.ScaleType.CENTER);
+            deleteButton.setContentDescription(
+                    ctx.getString(R.string.extra_keys_text_input_delete));
+            deleteButton.setClickable(true);
+            deleteButton.setOnClickListener(v -> {
                 v.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP);
-                showInputHistory();
+                deleteWord();
+            });
+            // Long-press: clear the whole box.
+            deleteButton.setOnLongClickListener(v -> {
+                v.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS);
+                input.setText("");
+                return true;
             });
 
             sendButton = new ImageView(ctx);
@@ -489,7 +491,7 @@ public class ExtraKeysView extends LinearLayout {
                 return true;
             });
         }
-        for (View v : new View[] {input, micButton, historyButton, sendButton}) {
+        for (View v : new View[] {input, micButton, deleteButton, sendButton}) {
             if (v.getParent() != null) ((LinearLayout) v.getParent()).removeView(v);
         }
         boolean listening = voice != null && voice.isListening();
@@ -499,8 +501,8 @@ public class ExtraKeysView extends LinearLayout {
         input.setTextColor(palette.textPrimary);
         input.setHintTextColor(palette.textSecondary);
         input.setBackground(palette.rounded(palette.surface2, r, palette.border));
-        historyButton.setImageTintList(ColorStateList.valueOf(palette.textSecondary));
-        historyButton.setBackground(keyBg());
+        deleteButton.setImageTintList(ColorStateList.valueOf(palette.textSecondary));
+        deleteButton.setBackground(keyBg());
         sendButton.setImageTintList(ColorStateList.valueOf(palette.accent));
         sendButton.setBackground(keyBg());
 
@@ -511,7 +513,7 @@ public class ExtraKeysView extends LinearLayout {
                 0, LinearLayout.LayoutParams.MATCH_PARENT, 1f);
         fieldLp.setMargins(m, m, m, m);
         row.addView(input, fieldLp);
-        for (View b : new View[] {micButton, historyButton, sendButton}) {
+        for (View b : new View[] {micButton, deleteButton, sendButton}) {
             LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
                     Chrome.dp(ctx, R.dimen.icon_button), LinearLayout.LayoutParams.MATCH_PARENT);
             lp.setMargins(m, m, m, m);
@@ -530,42 +532,32 @@ public class ExtraKeysView extends LinearLayout {
     private void sendInput(boolean withEnter) {
         if (input == null || terminal == null) return;
         String text = input.getText().toString();
-        if (!text.isEmpty()) {
-            terminal.dispatchText(text);
-            rememberInput(text);
-        }
+        if (!text.isEmpty()) terminal.dispatchText(text);
         if (withEnter) terminal.dispatchKey(KeyEvent.KEYCODE_ENTER);
         input.setText("");
     }
 
-    private static void rememberInput(String text) {
-        INPUT_HISTORY.remove(text); // re-sending moves it to the top
-        INPUT_HISTORY.add(0, text);
-        while (INPUT_HISTORY.size() > INPUT_HISTORY_MAX) {
-            INPUT_HISTORY.remove(INPUT_HISTORY.size() - 1);
+    /**
+     * Deletes the selection, or else the word before the cursor along with the
+     * spaces after it, so a misheard ending can be dropped and re-dictated.
+     * With the box empty it sends Backspace to the terminal instead.
+     */
+    private void deleteWord() {
+        if (input == null || terminal == null) return;
+        Editable e = input.getText();
+        if (e.length() == 0) {
+            terminal.dispatchKey(KeyEvent.KEYCODE_DEL);
+            return;
         }
-    }
-
-    /** Lists recent lines, newest first; picking one puts it back in the box to edit. */
-    private void showInputHistory() {
-        AlertDialog.Builder b = new AlertDialog.Builder(getContext())
-                .setTitle(R.string.extra_keys_text_input_history)
-                .setNegativeButton(R.string.action_cancel, null);
-        if (INPUT_HISTORY.isEmpty()) {
-            b.setMessage(R.string.extra_keys_text_input_history_empty);
-        } else {
-            CharSequence[] items = INPUT_HISTORY.toArray(new CharSequence[0]);
-            b.setItems(items, (d, which) -> {
-                String picked = items[which].toString();
-                input.setText(picked);
-                input.setSelection(picked.length());
-                input.requestFocus();
-                InputMethodManager imm =
-                        getContext().getSystemService(InputMethodManager.class);
-                if (imm != null) imm.showSoftInput(input, 0);
-            });
+        int start = input.getSelectionStart();
+        int end = input.getSelectionEnd();
+        if (start < 0 || end < 0) start = end = e.length();
+        if (start > end) { int t = start; start = end; end = t; }
+        if (start == end) {
+            while (start > 0 && Character.isWhitespace(e.charAt(start - 1))) start--;
+            while (start > 0 && !Character.isWhitespace(e.charAt(start - 1))) start--;
         }
-        b.show();
+        e.delete(start, end);
     }
 
     // A sideways drag anywhere on the toolbar toggles the input box. It is
