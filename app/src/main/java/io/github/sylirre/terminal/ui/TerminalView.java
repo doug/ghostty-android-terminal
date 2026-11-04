@@ -232,6 +232,11 @@ public class TerminalView extends View {
     // path above is used unchanged. Only active on the main screen (the alt
     // screen has no scrollback). See onDraw and scrollByPixels.
     private boolean smoothScroll = true;
+    // E-ink: text is pushed to at least MIN_CONTRAST against its cell
+    // background (see legibleOn); results cached per (fg, bg) pair.
+    private boolean boostContrast;
+    private static final double MIN_CONTRAST = 7.0;
+    private final java.util.HashMap<Long, Integer> contrastCache = new java.util.HashMap<>();
     private float pixelScrollOffset;
 
     // --- Mouse reporting. When the user has enabled it (the master switch
@@ -595,6 +600,61 @@ public class TerminalView extends View {
         }
         if (scrollState[0] > scrollState[2]) awakenScrollBars();
         return (deltaPx > 0 && atBottom) || (deltaPx < 0 && atTop);
+    }
+
+    /**
+     * When on, every glyph is drawn with at least {@link #MIN_CONTRAST}
+     * (WCAG) contrast against its cell background: dim grays and faint text,
+     * which wash out on e-paper, are darkened (or lightened on a dark
+     * background). Colors already legible are left untouched.
+     */
+    public void setBoostContrast(boolean enabled) {
+        if (boostContrast == enabled) return;
+        boostContrast = enabled;
+        contrastCache.clear();
+        invalidate();
+    }
+
+    private int legibleOn(int fg, int bg) {
+        long key = ((long) fg << 32) | (bg & 0xFFFFFFFFL);
+        Integer hit = contrastCache.get(key);
+        if (hit != null) return hit;
+        double lb = luminance(bg);
+        int out = fg;
+        if (contrast(luminance(fg), lb) < MIN_CONTRAST) {
+            // Head for whichever of black and white contrasts more with the
+            // background, mixing in steps so some of the hue survives.
+            int target = contrast(0, lb) >= contrast(1, lb) ? 0xFF000000 : 0xFFFFFFFF;
+            for (int step = 1; step <= 10; step++) {
+                out = mix(fg, target, step / 10f);
+                if (contrast(luminance(out), lb) >= MIN_CONTRAST) break;
+            }
+        }
+        if (contrastCache.size() > 4096) contrastCache.clear();
+        contrastCache.put(key, out);
+        return out;
+    }
+
+    private static int mix(int a, int b, float t) {
+        int r = Math.round(((a >> 16) & 0xFF) * (1 - t) + ((b >> 16) & 0xFF) * t);
+        int g = Math.round(((a >> 8) & 0xFF) * (1 - t) + ((b >> 8) & 0xFF) * t);
+        int bl = Math.round((a & 0xFF) * (1 - t) + (b & 0xFF) * t);
+        return 0xFF000000 | (r << 16) | (g << 8) | bl;
+    }
+
+    private static double contrast(double la, double lb) {
+        return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05);
+    }
+
+    /** WCAG relative luminance of an ARGB color. */
+    private static double luminance(int c) {
+        return 0.2126 * linear((c >> 16) & 0xFF) + 0.7152 * linear((c >> 8) & 0xFF)
+                + 0.0722 * linear(c & 0xFF);
+    }
+
+    private static double linear(int v) {
+        double s = v / 255.0;
+        return s <= 0.04045 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4);
     }
 
     /**
@@ -1827,6 +1887,7 @@ public class TerminalView extends View {
             // background stays but the glyph disappears.
             if (!textBlinkOn && cp != 0 && (snap.attrs[i] & TerminalNative.ATTR_BLINK) != 0) cp = 0;
             int fg = x < sc ? snap.fg[i] : 0;
+            if (boostContrast && x < sc) fg = legibleOn(fg, snap.bg[i]);
             int attr = x < sc ? (snap.attrs[i] & ~TerminalNative.ATTR_WIDE) : 0;
             // A grapheme cluster (base + combining/ZWJ marks) is several
             // codepoints rendered as one glyph; draw it whole so the font can

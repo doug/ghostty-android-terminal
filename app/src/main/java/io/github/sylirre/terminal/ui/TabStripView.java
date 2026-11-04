@@ -100,6 +100,7 @@ public class TabStripView extends LinearLayout {
     }
 
     private boolean hideLoneTab;
+    private boolean animationsEnabled = true;
 
     public TabStripView(Context context, AttributeSet attrs) {
         super(context, attrs);
@@ -155,6 +156,17 @@ public class TabStripView extends LinearLayout {
         updateLoneTab();
     }
 
+    /**
+     * Turns the tab add/remove animation and the scroller's fading edge on or
+     * off (off for e-ink, where every animation frame is a partial refresh).
+     */
+    public void setAnimationsEnabled(boolean enabled) {
+        if (animationsEnabled == enabled) return;
+        animationsEnabled = enabled;
+        scroller.setHorizontalFadingEdgeEnabled(enabled);
+        if (transitionsArmed) row.setLayoutTransition(enabled ? new LayoutTransition() : null);
+    }
+
     private void updateLoneTab() {
         scroller.setVisibility(hideLoneTab && holders.size() <= 1 ? GONE : VISIBLE);
     }
@@ -200,7 +212,9 @@ public class TabStripView extends LinearLayout {
         // restored strip doesn't animate into place.
         if (!transitionsArmed) {
             transitionsArmed = true;
-            post(() -> row.setLayoutTransition(new LayoutTransition()));
+            post(() -> {
+                if (animationsEnabled) row.setLayoutTransition(new LayoutTransition());
+            });
         }
         if (activeTab != null) {
             final View tabToShow = activeTab;

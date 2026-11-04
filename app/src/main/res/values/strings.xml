@@ -42,6 +42,8 @@
     <string name="setting_immersive_mode_title">Immersive mode</string>
     <string name="setting_floating_top_bar_title">Floating tab bar</string>
     <string name="setting_floating_top_bar_summary">Float the tabs and buttons over the terminal\'s top-right corner instead of a full-width bar, so the terminal gets the whole height. A lone tab is hidden.</string>
+    <string name="setting_eink_mode_title">E-ink mode</string>
+    <string name="setting_eink_mode_summary">Tune for e-paper: redraw at most 4 times a second, darken faint and low-contrast text, and turn off cursor blink, smooth scrolling and tab animations. Long-press the settings button to flash the screen and clear ghosting.</string>
     <string name="setting_immersive_mode_summary">Hide the status and navigation bars while using the terminal. Swipe from an edge to reveal them temporarily.</string>
 
     <!-- Settings: Rich keyboard -->

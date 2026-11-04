@@ -14,6 +14,7 @@ import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.database.Cursor;
 import android.graphics.Bitmap;
+import android.graphics.Color;
 import android.graphics.Typeface;
 import android.media.AudioManager;
 import android.media.ToneGenerator;
@@ -173,7 +174,7 @@ public class MainActivity extends Activity implements TerminalSession.Listener {
         applyImmersiveMode(settings.immersiveMode());
         terminal.setRichKeyboard(settings.richKeyboard());
         terminal.setTouchKeyboardEnabled(settings.touchKeyboard());
-        terminal.setSmoothScroll(settings.smoothScroll());
+        terminal.setSmoothScroll(settings.smoothScroll() && !settings.einkMode());
         terminal.setMouseTracking(settings.mouseTracking());
         terminal.setTapToOpenLinks(settings.tapToOpenLinks());
         applyTextMargins();
@@ -328,9 +329,10 @@ public class MainActivity extends Activity implements TerminalSession.Listener {
         applyKeepScreenOn(settings.keepScreenOn());
         applyImmersiveMode(settings.immersiveMode());
         applyFloatingTopBar(settings.floatingTopBar());
+        applyEinkMode(settings.einkMode());
         terminal.setTouchKeyboardEnabled(settings.touchKeyboard());
         terminal.setRichKeyboard(settings.richKeyboard());
-        terminal.setSmoothScroll(settings.smoothScroll());
+        terminal.setSmoothScroll(settings.smoothScroll() && !settings.einkMode());
         terminal.setMouseTracking(settings.mouseTracking());
         terminal.setTapToOpenLinks(settings.tapToOpenLinks());
         applyPromptNav();
@@ -380,7 +382,7 @@ public class MainActivity extends Activity implements TerminalSession.Listener {
         TerminalTheme theme = themeStore.current();
         int[] palette = theme.toPalette256();
         int cursorStyle = settings.cursorStyle();
-        boolean cursorBlink = settings.cursorBlink();
+        boolean cursorBlink = settings.cursorBlink() && !settings.einkMode();
         boolean grapheme = settings.graphemeClustering();
         for (TerminalSession s : sessions.sessions()) {
             s.emulator.setColors(theme.foreground, theme.background, theme.cursor, palette);
@@ -1322,7 +1324,66 @@ public class MainActivity extends Activity implements TerminalSession.Listener {
 
     @Override
     public void onUpdate(TerminalSession session) {
-        if (session == current) terminal.invalidate();
+        if (session != current) return;
+        if (!einkMode) {
+            terminal.invalidate();
+            return;
+        }
+        // E-ink: at most one frame per EINK_FRAME_MS. The first update after
+        // a quiet spell draws at once (typing stays responsive); a burst of
+        // output then lands as one trailing frame instead of dozens of
+        // partial e-paper refreshes.
+        if (einkFramePending) return;
+        long wait = lastEinkFrame + EINK_FRAME_MS - SystemClock.uptimeMillis();
+        if (wait <= 0) {
+            einkFrame.run();
+        } else {
+            einkFramePending = true;
+            terminal.postDelayed(einkFrame, wait);
+        }
+    }
+
+    private static final long EINK_FRAME_MS = 250;
+    private boolean einkMode;
+    private boolean einkFramePending;
+    private long lastEinkFrame;
+    private final Runnable einkFrame = () -> {
+        einkFramePending = false;
+        lastEinkFrame = SystemClock.uptimeMillis();
+        terminal.invalidate();
+    };
+
+    /** Applies the e-ink tuning (see {@link AppSettings#einkMode}). */
+    private void applyEinkMode(boolean on) {
+        einkMode = on;
+        terminal.setBoostContrast(on);
+        terminal.setSmoothScroll(settings.smoothScroll() && !on);
+        tabs.setAnimationsEnabled(!on);
+        View settingsButton = findViewById(R.id.settings_button);
+        if (on) {
+            settingsButton.setOnLongClickListener(v -> {
+                flashScreen();
+                return true;
+            });
+        } else {
+            settingsButton.setOnLongClickListener(null);
+            settingsButton.setLongClickable(false);
+        }
+    }
+
+    /**
+     * Covers the screen black, then white, then removes the cover: the
+     * full-swing redraw clears the ghosting partial e-paper refreshes leave.
+     */
+    private void flashScreen() {
+        ViewGroup root = findViewById(R.id.root);
+        View cover = new View(this);
+        cover.setBackgroundColor(Color.BLACK);
+        cover.setElevation(1000f);
+        root.addView(cover, new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        cover.postDelayed(() -> cover.setBackgroundColor(Color.WHITE), 200);
+        cover.postDelayed(() -> root.removeView(cover), 400);
     }
 
     @Override

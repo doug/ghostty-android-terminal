@@ -236,6 +236,11 @@ public final class SettingsActivity extends Activity {
                 settings::floatingTopBar,
                 settings::setFloatingTopBar));
         terminal.add(new Setting.Toggle(
+                getString(R.string.setting_eink_mode_title),
+                getString(R.string.setting_eink_mode_summary),
+                settings::einkMode,
+                settings::setEinkMode));
+        terminal.add(new Setting.Toggle(
                 getString(R.string.setting_confirm_close_title),
                 getString(R.string.setting_confirm_close_summary),
                 settings::confirmSessionClose,

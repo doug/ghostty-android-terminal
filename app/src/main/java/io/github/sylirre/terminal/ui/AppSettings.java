@@ -25,6 +25,7 @@ public final class AppSettings {
     private static final String KEY_KEEP_SCREEN_ON = "keep_screen_on";
     private static final String KEY_IMMERSIVE_MODE = "immersive_mode";
     private static final String KEY_FLOATING_TOP_BAR = "floating_top_bar";
+    private static final String KEY_EINK_MODE = "eink_mode";
     private static final String KEY_RICH_KEYBOARD = "rich_keyboard";
     private static final String KEY_EXTRA_KEYS_ENABLED = "extra_keys_enabled";
     private static final String KEY_SCROLLBACK_LINES = "scrollback_lines";
@@ -138,6 +139,19 @@ public final class AppSettings {
 
     public void setFloatingTopBar(boolean enabled) {
         prefs.edit().putBoolean(KEY_FLOATING_TOP_BAR, enabled).apply();
+    }
+
+    /**
+     * When true, tune the terminal screen for e-paper: throttled redraws,
+     * low-contrast text darkened, no cursor blink, smooth scrolling or tab
+     * animations, and a long-press on settings to flash away ghosting.
+     */
+    public boolean einkMode() {
+        return prefs.getBoolean(KEY_EINK_MODE, false);
+    }
+
+    public void setEinkMode(boolean enabled) {
+        prefs.edit().putBoolean(KEY_EINK_MODE, enabled).apply();
     }
 
     /**
