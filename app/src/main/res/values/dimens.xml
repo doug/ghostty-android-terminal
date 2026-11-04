@@ -41,8 +41,11 @@
          tab_active_border is the active pill's accent ring; tab_indicator is
          the progress ring's stroke (kept heavier so the small circle stays
          readable). -->
-    <dimen name="tab_pad_h">12dp</dimen>
-    <dimen name="tab_pad_v">9dp</dimen>
+    <dimen name="tab_pad_h">10dp</dimen>
+    <dimen name="tab_pad_v">3dp</dimen>
+    <!-- Padding around a tab's close glyph (horizontal, vertical). -->
+    <dimen name="tab_close_pad_h">6dp</dimen>
+    <dimen name="tab_close_pad_v">3dp</dimen>
     <dimen name="tab_active_border">1.5dp</dimen>
     <dimen name="tab_indicator">2dp</dimen>
     <dimen name="tab_max_width">132dp</dimen>
@@ -65,6 +68,10 @@
 
     <!-- Screen top bar (back + title + trailing actions). -->
     <dimen name="top_bar_height">56dp</dimen>
+    <!-- The terminal screen's tab bar and its square buttons (new tab, search,
+         settings): kept compact because every dp is a terminal row. -->
+    <dimen name="main_bar_height">40dp</dimen>
+    <dimen name="main_bar_button">34dp</dimen>
     <dimen name="elevation_bar">3dp</dimen>
 
     <!-- Slider value read-out reserve, so digits don't jiggle the bar. -->

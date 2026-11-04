@@ -134,7 +134,7 @@ public class TabStripView extends LinearLayout {
             return true;
         });
         styleAddButton();
-        int size = dp(R.dimen.icon_button);
+        int size = dp(R.dimen.main_bar_button);
         LayoutParams addLp = new LayoutParams(size, size);
         addLp.setMarginStart(dp(R.dimen.space_1));
         addView(addButton, addLp);
@@ -236,8 +236,8 @@ public class TabStripView extends LinearLayout {
         close.setClickable(true);
         close.setFocusable(true);
         close.setBackground(Chrome.rippleTransparent(context, dp(R.dimen.radius_pill)));
-        close.setPaddingRelative(dp(R.dimen.space_2), dp(R.dimen.space_2),
-                dp(R.dimen.space_2), dp(R.dimen.space_2));
+        close.setPaddingRelative(dp(R.dimen.tab_close_pad_h), dp(R.dimen.tab_close_pad_v),
+                dp(R.dimen.tab_close_pad_h), dp(R.dimen.tab_close_pad_v));
         pill.addView(close);
 
         // The OSC 9;4 progress ring wraps the close glyph as the view's

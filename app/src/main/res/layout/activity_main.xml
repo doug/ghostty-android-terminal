@@ -20,7 +20,7 @@
             android:layout_height="wrap_content"
             android:orientation="horizontal"
             android:gravity="center_vertical"
-            android:minHeight="@dimen/top_bar_height"
+            android:minHeight="@dimen/main_bar_height"
             android:paddingStart="@dimen/space_1"
             android:paddingEnd="@dimen/space_1"
             android:elevation="@dimen/elevation_bar"
@@ -34,8 +34,8 @@
 
             <TextView
                 android:id="@+id/prompt_prev_button"
-                android:layout_width="@dimen/icon_button"
-                android:layout_height="@dimen/icon_button"
+                android:layout_width="@dimen/main_bar_button"
+                android:layout_height="@dimen/main_bar_button"
                 android:layout_marginStart="@dimen/space_1"
                 android:layout_gravity="center_vertical"
                 android:gravity="center"
@@ -50,8 +50,8 @@
 
             <TextView
                 android:id="@+id/prompt_next_button"
-                android:layout_width="@dimen/icon_button"
-                android:layout_height="@dimen/icon_button"
+                android:layout_width="@dimen/main_bar_button"
+                android:layout_height="@dimen/main_bar_button"
                 android:layout_marginStart="@dimen/space_1"
                 android:layout_gravity="center_vertical"
                 android:gravity="center"
@@ -66,8 +66,8 @@
 
             <TextView
                 android:id="@+id/search_button"
-                android:layout_width="@dimen/icon_button"
-                android:layout_height="@dimen/icon_button"
+                android:layout_width="@dimen/main_bar_button"
+                android:layout_height="@dimen/main_bar_button"
                 android:layout_marginStart="@dimen/space_1"
                 android:layout_gravity="center_vertical"
                 android:gravity="center"
@@ -81,8 +81,8 @@
 
             <TextView
                 android:id="@+id/settings_button"
-                android:layout_width="@dimen/icon_button"
-                android:layout_height="@dimen/icon_button"
+                android:layout_width="@dimen/main_bar_button"
+                android:layout_height="@dimen/main_bar_button"
                 android:layout_marginStart="@dimen/space_1"
                 android:layout_gravity="center_vertical"
                 android:gravity="center"
@@ -120,7 +120,7 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_gravity="top"
-        android:layout_marginTop="@dimen/top_bar_height"
+        android:layout_marginTop="@dimen/main_bar_height"
         android:visibility="gone" />
 
 </FrameLayout>
